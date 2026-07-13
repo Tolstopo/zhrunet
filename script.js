@@ -243,14 +243,263 @@
   const glyphs = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZЖРУНЕТ<>/\\|";
   const frameInterval = 1000 / 30;
   const fontSize = 16;
+  const easterEggDefinitions = [
+    {
+      side: "left",
+      verticalPosition: 0.43,
+      rows: [
+        "110000000000",
+        "011000000000",
+        "001100000000",
+        "000110000000",
+        "001100000000",
+        "011000000000",
+        "110000111111",
+      ],
+    },
+    {
+      side: "right",
+      verticalPosition: 0.57,
+      rows: [
+        "1111110110011",
+        "0000110110011",
+        "0001100110011",
+        "0011000111111",
+        "0110000110011",
+        "1100000110011",
+        "1111110110011",
+      ],
+    },
+  ];
+  const easterEggTimings = {
+    assemble: 500,
+    hold: 650,
+    dissolve: 500,
+    firstDelayMin: 35_000,
+    firstDelayMax: 50_000,
+    repeatDelayMin: 70_000,
+    repeatDelayMax: 110_000,
+  };
+  const easterEggDuration = easterEggTimings.assemble
+    + easterEggTimings.hold
+    + easterEggTimings.dissolve;
   let width = 0;
   let height = 0;
   let drops = new Float32Array(0);
   let speeds = new Float32Array(0);
+  let easterEggLayouts = [null, null];
+  let easterEggHasSpace = false;
+  let easterEggActive = false;
+  let easterEggIndex = 0;
+  let easterEggStartedAt = 0;
+  let nextEasterEggAt = 0;
+  let canvasFontStack = "monospace";
   let animationFrame = 0;
   let resizeFrame = 0;
   let lastFrameTime = 0;
   let running = false;
+
+  const randomBetween = (minimum, maximum) => minimum + Math.random() * (maximum - minimum);
+
+  const canShowEasterEgg = () => easterEggHasSpace
+    && !document.hidden
+    && !reducedMotion.matches;
+
+  const cancelEasterEgg = () => {
+    easterEggActive = false;
+    easterEggStartedAt = 0;
+  };
+
+  const scheduleEasterEgg = (timestamp, isFirstAppearance) => {
+    const minimum = isFirstAppearance
+      ? easterEggTimings.firstDelayMin
+      : easterEggTimings.repeatDelayMin;
+    const maximum = isFirstAppearance
+      ? easterEggTimings.firstDelayMax
+      : easterEggTimings.repeatDelayMax;
+
+    cancelEasterEgg();
+    nextEasterEggAt = timestamp + randomBetween(minimum, maximum);
+  };
+
+  const createEasterEggLayout = (definition, zoneStart, zoneEnd) => {
+    const rowCount = definition.rows.length;
+    const columnCount = definition.rows[0].length;
+    const availableWidth = zoneEnd - zoneStart;
+    const cellSize = Math.floor(Math.min(
+      20,
+      220 / columnCount,
+      140 / rowCount,
+      availableWidth / columnCount,
+    ));
+
+    if (cellSize < 12) {
+      return null;
+    }
+
+    const symbolWidth = columnCount * cellSize;
+    const symbolHeight = rowCount * cellSize;
+    const originX = zoneStart + (availableWidth - symbolWidth) / 2;
+    const originY = Math.max(
+      24,
+      Math.min(
+        height - symbolHeight - 24,
+        height * definition.verticalPosition - symbolHeight / 2,
+      ),
+    );
+    const points = [];
+
+    for (let row = 0; row < rowCount; row += 1) {
+      for (let column = 0; column < columnCount; column += 1) {
+        if (definition.rows[row][column] !== "1") {
+          continue;
+        }
+
+        points.push({
+          x: originX + column * cellSize,
+          y: originY + row * cellSize,
+          delay: Math.random(),
+          jitterX: Math.random() * 2 - 1,
+          jitterY: Math.random() * 2 - 1,
+          glyphOffset: Math.floor(Math.random() * glyphs.length),
+          alpha: 0.48 + Math.random() * 0.28,
+        });
+      }
+    }
+
+    return {
+      points,
+      fontSize: Math.max(13, Math.floor(cellSize * 0.92)),
+      left: originX,
+      right: originX + symbolWidth,
+    };
+  };
+
+  const prepareEasterEggLayouts = () => {
+    const terminal = document.querySelector(".terminal");
+
+    if (!terminal || width < 1200 || height < 650) {
+      easterEggLayouts = [null, null];
+      easterEggHasSpace = false;
+      return;
+    }
+
+    const terminalRect = terminal.getBoundingClientRect();
+    const edgePadding = 24;
+    const terminalGap = 56;
+    const leftLayout = createEasterEggLayout(
+      easterEggDefinitions[0],
+      edgePadding,
+      terminalRect.left - terminalGap,
+    );
+    const rightLayout = createEasterEggLayout(
+      easterEggDefinitions[1],
+      terminalRect.right + terminalGap,
+      width - edgePadding,
+    );
+
+    easterEggLayouts = [leftLayout, rightLayout];
+    easterEggHasSpace = Boolean(
+      leftLayout
+      && rightLayout
+      && leftLayout.right <= terminalRect.left - terminalGap
+      && rightLayout.left >= terminalRect.right + terminalGap,
+    );
+  };
+
+  const updateEasterEggAvailability = (timestamp) => {
+    const wasAvailable = canShowEasterEgg();
+    prepareEasterEggLayouts();
+
+    if (!canShowEasterEgg()) {
+      cancelEasterEgg();
+      nextEasterEggAt = 0;
+      return;
+    }
+
+    if (!wasAvailable || !nextEasterEggAt) {
+      scheduleEasterEgg(timestamp, true);
+    }
+  };
+
+  const drawEasterEgg = (timestamp) => {
+    if (!canShowEasterEgg()) {
+      return;
+    }
+
+    if (!easterEggActive && nextEasterEggAt && timestamp >= nextEasterEggAt) {
+      easterEggActive = true;
+      easterEggStartedAt = timestamp;
+    }
+
+    if (!easterEggActive) {
+      return;
+    }
+
+    const elapsed = timestamp - easterEggStartedAt;
+
+    if (elapsed >= easterEggDuration) {
+      easterEggActive = false;
+      easterEggIndex = (easterEggIndex + 1) % easterEggLayouts.length;
+      nextEasterEggAt = Math.max(
+        easterEggStartedAt + randomBetween(
+          easterEggTimings.repeatDelayMin,
+          easterEggTimings.repeatDelayMax,
+        ),
+        timestamp + 60_000,
+      );
+      return;
+    }
+
+    const layout = easterEggLayouts[easterEggIndex];
+    if (!layout) {
+      cancelEasterEgg();
+      nextEasterEggAt = 0;
+      return;
+    }
+
+    const assembleEnd = easterEggTimings.assemble;
+    const holdEnd = assembleEnd + easterEggTimings.hold;
+    const isAssembling = elapsed < assembleEnd;
+    const isDissolving = elapsed >= holdEnd;
+    const phaseProgress = isAssembling
+      ? elapsed / easterEggTimings.assemble
+      : isDissolving
+        ? (elapsed - holdEnd) / easterEggTimings.dissolve
+        : 1;
+    context.save();
+    context.font = `${layout.fontSize}px ${canvasFontStack}`;
+    context.textBaseline = "top";
+
+    for (let index = 0; index < layout.points.length; index += 1) {
+      const point = layout.points[index];
+      const visibility = isAssembling
+        ? Math.max(0, Math.min(1, (phaseProgress - point.delay * 0.35) / 0.65))
+        : isDissolving
+          ? 1 - Math.max(0, Math.min(1, (phaseProgress - point.delay * 0.25) / 0.75))
+          : 1;
+
+      if (visibility <= 0) {
+        continue;
+      }
+
+      const easedVisibility = visibility * visibility * (3 - 2 * visibility);
+      const scatter = (1 - easedVisibility) * 11;
+      const shimmer = Math.sin(timestamp * 0.003 + point.delay * 12) * 0.65;
+      const x = point.x + point.jitterX * scatter + shimmer;
+      const y = point.y + point.jitterY * scatter - shimmer * 0.45;
+      const glyphIndex = (
+        point.glyphOffset
+        + Math.floor(timestamp / 120)
+        + index
+      ) % glyphs.length;
+
+      context.fillStyle = `rgba(98, 255, 120, ${point.alpha * easedVisibility})`;
+      context.fillText(glyphs[glyphIndex], x, y);
+    }
+
+    context.restore();
+  };
 
   const resizeCanvas = () => {
     const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
@@ -259,7 +508,8 @@
     canvas.width = Math.max(1, Math.floor(width * pixelRatio));
     canvas.height = Math.max(1, Math.floor(height * pixelRatio));
     context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-    context.font = `${fontSize}px ${getComputedStyle(document.documentElement).getPropertyValue("--font-mono")}`;
+    canvasFontStack = getComputedStyle(document.documentElement).getPropertyValue("--font-mono");
+    context.font = `${fontSize}px ${canvasFontStack}`;
     context.textBaseline = "top";
 
     const columnCount = Math.ceil(width / fontSize);
@@ -270,9 +520,11 @@
       drops[index] = -Math.random() * (height / fontSize + 12);
       speeds[index] = 0.38 + Math.random() * 0.48;
     }
+
+    updateEasterEggAvailability(performance.now());
   };
 
-  const drawRain = () => {
+  const drawRain = (timestamp) => {
     context.fillStyle = "rgba(2, 5, 3, 0.17)";
     context.fillRect(0, 0, width, height);
     context.fillStyle = "rgba(98, 255, 120, 0.9)";
@@ -289,6 +541,8 @@
         speeds[index] = 0.38 + Math.random() * 0.48;
       }
     }
+
+    drawEasterEgg(timestamp);
   };
 
   const animate = (timestamp) => {
@@ -299,7 +553,7 @@
     const elapsed = timestamp - lastFrameTime;
     if (elapsed >= frameInterval) {
       lastFrameTime = timestamp - (elapsed % frameInterval);
-      drawRain();
+      drawRain(timestamp);
     }
 
     animationFrame = window.requestAnimationFrame(animate);
@@ -320,15 +574,20 @@
 
     running = true;
     lastFrameTime = performance.now();
-    drawRain();
+    drawRain(lastFrameTime);
     animationFrame = window.requestAnimationFrame(animate);
   };
 
   const updateMotionPreference = () => {
     if (reducedMotion.matches) {
+      cancelEasterEgg();
+      nextEasterEggAt = 0;
       stopRain();
       context.clearRect(0, 0, width, height);
     } else {
+      if (canShowEasterEgg() && !nextEasterEggAt) {
+        scheduleEasterEgg(performance.now(), true);
+      }
       startRain();
     }
   };
@@ -349,8 +608,14 @@
 
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
+      cancelEasterEgg();
+      nextEasterEggAt = 0;
       stopRain();
     } else {
+      prepareEasterEggLayouts();
+      if (canShowEasterEgg()) {
+        scheduleEasterEgg(performance.now(), false);
+      }
       startRain();
     }
   });
