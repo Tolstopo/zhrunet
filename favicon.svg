@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Терминальный знак">
+  <rect width="64" height="64" rx="8" fill="#020503"/>
+  <path d="M14 17 31 32 14 47" fill="none" stroke="#62ff78" stroke-width="8" stroke-linecap="square" stroke-linejoin="miter"/>
+  <path d="M35 47h17" fill="none" stroke="#a4ffae" stroke-width="8" stroke-linecap="square"/>
+</svg>
