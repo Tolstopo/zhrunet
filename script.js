@@ -58,6 +58,14 @@
   };
 
   destinations.forEach((link, index) => {
+    link.addEventListener("click", () => {
+      const goalName = link.dataset.metrikaGoal;
+
+      if (goalName && typeof window.ym === "function") {
+        window.ym(110711208, "reachGoal", goalName);
+      }
+    });
+
     link.addEventListener("pointerenter", () => {
       keyboardIndex = -1;
       hoverIndex = index;
