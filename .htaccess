@@ -3,7 +3,7 @@ Options -Indexes
 
 <IfModule mod_rewrite.c>
   RewriteEngine On
-  RewriteRule ^go/tg/?$ https://t.me/tolstuil [R=302,L,NE]
+  RewriteRule ^go/tg/?$ https://telegram.me/tolstuil [R=302,L,NE]
   RewriteRule ^go/portfolio/?$ https://alexeyzharkov.ru/?utm_source=zh.ru.net&utm_medium=referral&utm_campaign=personal_hub [R=302,L,NE]
   RewriteRule ^go/product/?$ https://xn----7sbzclracelfoe2a.xn--p1ai/?utm_source=zh.ru.net&utm_medium=referral&utm_campaign=personal_hub [R=302,L,NE]
 </IfModule>
